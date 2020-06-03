@@ -117,15 +117,15 @@ function init() {
             confirmTrade(data[1].ref).then(() => {
               if (offerSentFor.indexOf(data[1].ref) === -1) {
                 offerSentFor.push(data[1].ref);
-                if (config.steam) {
-                  getDetails(data[1].ref).then(details => {
+                getDetails(data[1].ref).then(details => {
+                  if (config.steam) {
                     sendSteamOffer(details.trade.items[0], details.trade.tradeUrl);
-                    if (config.discord) {
-                      sendDiscord(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`);
-                      console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
-                    }
-                  });
-                }
+                  }
+                  if (config.discord) {
+                    sendDiscord(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`);
+                    console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
+                  }
+                });
               }
             }).catch(err => {
               console.log(err);
@@ -193,9 +193,9 @@ function sendSteamOffer(sendItem, tradeUrl) {
   offer.send(function (err, status) {
     if (offer.id !== null) {
       setTimeout(() => {
-         steam.acceptConfirmationForObject(config.identitySecret, offer.id, status => {
-           console.log('Deposit item sent & confirmed');
-         });
+        steam.acceptConfirmationForObject(config.identitySecret, offer.id, status => {
+          console.log('Deposit item sent & confirmed');
+        });
       }, 3000);
     }
   });
