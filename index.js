@@ -31,46 +31,20 @@ console.log = function (d, dc = false, color = '\x1b[0m') {
 };
 
 
-let manager = null;
+let manager = new TradeOfferManager({
+  "domain": config.domain,
+  "language": "en",
+  "pollInterval": 30000,
+  "cancelTime": 9 * 60 * 1000, // cancel outgoing offers after 9mins
+});
 // if steam deposit enabled
 if (config.steam) {
-  manager = new TradeOfferManager({
-    "domain": config.domain,
-    "language": "en",
-    "pollInterval": 30000,
-    "cancelTime": 9 * 60 * 1000, // cancel outgoing offers after 9mins
-  });
-  const logOnOptions = {
-    "accountName": config.accountName,
-    "password": config.password,
-    "twoFactorCode": SteamTotp.getAuthCode(config.sharedSecret)
-  };
-
-  if (fs.existsSync('steamguard.txt')) {
-    logOnOptions.steamguard = fs.readFileSync('steamguard.txt').toString('utf8');
-  }
-
-  if (fs.existsSync('polldata.json')) {
-    manager.pollData = JSON.parse(fs.readFileSync('polldata.json'));
-  }
-
-  steam.login(logOnOptions, function (err, sessionID, cookies, steamguard) {
-    if (err) {
-      console.log("Steam login fail: " + err.message);
-    }
-    fs.writeFile('steamguard.txt', steamguard, (err) => {
-      if (err) throw err;
+  steamLogin().then(() => {
+    console.log('Logged in to steam.');
+    getInventory(config.steam64Id, 730).then(inventory => {
+      userInventory = inventory;
     });
-    console.log("Logged into Steam");
-    manager.setCookies(cookies, function (err) {
-      if (err) {
-        console.log(err);
-        return;
-      }
-      getInventory(config.steam64Id, 730).then(inventory => {
-        userInventory = inventory;
-      });
-    });
+    init();
   });
 }
 
@@ -78,7 +52,7 @@ if (config.steam) {
 app.listen(config.port);
 
 const mainHeaders = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36',
   'Origin': 'https://www.rollbit.com',
   'Accept': 'application/json, text/*',
   'Connection': 'keep-alive',
@@ -87,14 +61,14 @@ const mainHeaders = {
 const offerSentFor = [];
 
 // dodge the first few trade_status event to prevent the double item send if the offer is already at 'Sending' state
-let dodge = true;
+let dodge = false;
 
 function init() {
   this.connection = new WebSocket('wss://ws.rollbit.com/', {
     headers: {
       'Pragma': 'no-cache',
       'Cache-Control': 'no-cache',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.61 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36',
       'Upgrade': 'websocket',
       'Cookie': config.mainCookie,
       'Origin': 'https://www.rollbit.com',
@@ -107,6 +81,9 @@ function init() {
   if (this.connection !== null) {
     this.connection.onmessage = e => {
       const data = JSON.parse(e.data);
+      if (data[0] === 'balance') {
+        console.log(data[1]);
+      }
       if (
         data[0] === 'steam/deposit'
       ) {
@@ -139,8 +116,6 @@ function init() {
   }
 }
 
-init();
-
 function getDetails(depositId) {
   return new Promise((resolve, reject) => {
     const options = {
@@ -172,32 +147,34 @@ const exceptAssetIds = [
 ];
 
 function sendSteamOffer(sendItem, tradeUrl) {
-  const items = [];
-  userInventory.forEach(item => {
-    if (
-      item.market_hash_name == sendItem.name &&
-      item.instanceid == sendItem.instanceid &&
-      item.classid == sendItem.classid &&
-      exceptAssetIds.indexOf(item.assetid) == -1 &&
-      !items.length
-    ) {
-      items.push({
-        assetid: item.assetid,
-        appid: item.appid,
-        contextid: item.contextid,
-      });
-    }
-  });
-  var offer = manager.createOffer(tradeUrl);
-  offer.addMyItems(items);
-  offer.send(function (err, status) {
-    if (offer.id !== null) {
-      setTimeout(() => {
-        steam.acceptConfirmationForObject(config.identitySecret, offer.id, status => {
-          console.log('Deposit item sent & confirmed');
+  steamLogin().then(() => {
+    const items = [];
+    userInventory.forEach(item => {
+      if (
+        item.market_hash_name == sendItem.name &&
+        item.instanceid == sendItem.instanceid &&
+        item.classid == sendItem.classid &&
+        exceptAssetIds.indexOf(item.assetid) == -1 &&
+        !items.length
+      ) {
+        items.push({
+          assetid: item.assetid,
+          appid: item.appid,
+          contextid: item.contextid,
         });
-      }, 3000);
-    }
+      }
+    });
+    var offer = manager.createOffer(tradeUrl);
+    offer.addMyItems(items);
+    offer.send(function (err, status) {
+      if (offer.id !== null) {
+        setTimeout(() => {
+          steam.acceptConfirmationForObject(config.identitySecret, offer.id, status => {
+            console.log('Deposit item sent & confirmed');
+          });
+        }, 3000);
+      }
+    });
   });
 }
 function confirmTrade(depositId) {
@@ -244,6 +221,38 @@ function getInventory(steamId, appId) {
       } else {
         resolve([]);
       }
+    });
+  });
+}
+function steamLogin() {
+  return new Promise((resolve, reject) => {
+    const logOnOptions = {
+      "accountName": config.accountName,
+      "password": config.password,
+      "twoFactorCode": SteamTotp.getAuthCode(config.sharedSecret)
+    };
+
+    if (fs.existsSync('steamguard.txt')) {
+      logOnOptions.steamguard = fs.readFileSync('steamguard.txt').toString('utf8');
+    }
+
+    if (fs.existsSync('polldata.json')) {
+      manager.pollData = JSON.parse(fs.readFileSync('polldata.json'));
+    }
+    steam.login(logOnOptions, function (err, sessionID, cookies, steamguard) {
+      if (err) {
+        console.log("Steam login fail: " + err.message);
+      }
+      fs.writeFile('steamguard.txt', steamguard, (err) => {
+        if (err) throw err;
+      });
+      manager.setCookies(cookies, function (err) {
+        if (err) {
+          console.log(err);
+          return;
+        }
+        resolve(true);
+      });
     });
   });
 }
