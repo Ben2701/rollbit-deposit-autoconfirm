@@ -52,7 +52,7 @@ if (config.steam) {
 app.listen(config.port);
 
 const mainHeaders = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36',
   'Origin': 'https://www.rollbit.com',
   'Accept': 'application/json, text/*',
   'Connection': 'keep-alive',
@@ -68,7 +68,7 @@ function init() {
     headers: {
       'Pragma': 'no-cache',
       'Cache-Control': 'no-cache',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.97 Safari/537.36',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36',
       'Upgrade': 'websocket',
       'Cookie': config.mainCookie,
       'Origin': 'https://www.rollbit.com',
@@ -82,6 +82,7 @@ function init() {
     this.connection.onmessage = e => {
       const data = JSON.parse(e.data);
       if (data[0] === 'balance') {
+        console.log('Logged in to rollbit.com');
         console.log(data[1]);
       }
       if (
