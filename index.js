@@ -57,7 +57,9 @@ if (config.steam) {
 }
 
 // do not terminate the app
-app.listen(config.port);
+setInterval(function() {
+  // 
+}, 1000 * 60 * 60);
 
 const mainHeaders = {
   'User-Agent': config.useragent,
