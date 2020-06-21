@@ -10,7 +10,15 @@ const io = require('socket.io-client'),
   util = require('util'),
   TradeOfferManager = require('steam-tradeoffer-manager'),
   config = require('./config.json'),
-  app = express();
+  Push = require( 'pushover-notifications' );
+
+let pushoverClient = undefined;
+if(config.pushover) {
+  pushoverClient = new Push({
+    user: config.pushoverUser,
+    token: config.pushoverToken,
+  });
+}
 
 const colors = {
   FgBlack: "\x1b[30m",
@@ -52,7 +60,7 @@ if (config.steam) {
 app.listen(config.port);
 
 const mainHeaders = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36',
+  'User-Agent': config.useragent,
   'Origin': 'https://www.rollbit.com',
   'Accept': 'application/json, text/*',
   'Connection': 'keep-alive',
@@ -68,7 +76,7 @@ function init() {
     headers: {
       'Pragma': 'no-cache',
       'Cache-Control': 'no-cache',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.106 Safari/537.36',
+      'User-Agent': config.useragent,
       'Upgrade': 'websocket',
       'Cookie': config.mainCookie,
       'Origin': 'https://www.rollbit.com',
@@ -99,10 +107,8 @@ function init() {
                   if (config.steam) {
                     sendSteamOffer(details.trade.items[0], details.trade.tradeUrl);
                   }
-                  if (config.discord) {
-                    sendDiscord(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`);
-                    console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
-                  }
+                  sendMessage(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`, config.discord, config.pushover);
+                  console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
                 });
               }
             }).catch(err => {
@@ -202,17 +208,30 @@ function confirmTrade(depositId) {
   });
 }
 
-function sendDiscord(msg) {
-  request({
-    url: config.discordHook,
-    method: 'POST',
-    json: true,
-    body: {
-      content: msg,
-    },
-  }, (error, response, b) => {
-    //
-  });
+function sendMessage(msg, discord = false, pushover = false) {
+  if(discord) {
+    request({
+      url: config.discordHook,
+      method: 'POST',
+      json: true,
+      body: {
+        content: msg,
+      },
+    }, (error, response, b) => {
+      //
+    });
+  }
+  if(pushover) {
+    pushoverClient.send({
+      message: msg,
+      title: '[ROLLBIT] Deposit',
+      priority: 1,
+    }, (err, result) => {
+      if (err) {
+        throw err;
+      }
+    });
+  }
 }
 function getInventory(steamId, appId) {
   return new Promise((resolve, reject) => {
