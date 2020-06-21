@@ -54,6 +54,8 @@ if (config.steam) {
     });
     init();
   });
+}else{
+  init();
 }
 
 // do not terminate the app
