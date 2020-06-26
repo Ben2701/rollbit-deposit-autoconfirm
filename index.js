@@ -179,7 +179,7 @@ function sendSteamOffer(sendItem, tradeUrl) {
     offer.addMyItems(items);
     offer.send(function (err, status) {
       if (offer.id !== null) {
-        setTimeout(() => {
+        setTimeout( () => {
           steam.acceptConfirmationForObject(config.identitySecret, offer.id, status => {
             console.log('Deposit item sent & confirmed');
           });
