@@ -60,7 +60,13 @@ if (config.steam) {
 
 // do not terminate the app
 setInterval(function() {
-  // 
+  steamLogin().then(() => {
+    console.log('Logged in to steam.');
+    getInventory(config.steam64Id, 730).then(inventory => {
+      userInventory = inventory;
+    });
+    init();
+  });
 }, 1000 * 60 * 60);
 
 const mainHeaders = {
@@ -75,7 +81,9 @@ const offerSentFor = [];
 // dodge the first few trade_status event to prevent the double item send if the offer is already at 'Sending' state
 let dodge = false;
 
+let balance = -1;
 function init() {
+  delete this.connection;
   this.connection = new WebSocket('wss://ws.rollbit.com/', {
     headers: {
       'Pragma': 'no-cache',
@@ -94,8 +102,12 @@ function init() {
     this.connection.onmessage = e => {
       const data = JSON.parse(e.data);
       if (data[0] === 'balance') {
-        console.log('Logged in to rollbit.com');
-        console.log(data[1]);
+        console.log(data);
+        if(balance !== data[1].balance) {
+          console.log('Logged in to rollbit.com');
+          balance = data[1].balance;
+          sendMessage(`Balance: ${data[1].balance}`, true);
+        }
       }
       if (
         data[0] === 'steam/deposit'
@@ -154,7 +166,7 @@ function getDetails(depositId) {
 // becarefull with this shit, and set properly! because rollbit doesnt give assetid's.
 // so if you have a good float FT fire serpent, the script can send that instead of shit float if you didnt put the assetid to the list.
 const exceptAssetIds = [
-  134567
+  '18916427900'
 ];
 
 function sendSteamOffer(sendItem, tradeUrl) {
@@ -276,6 +288,17 @@ function steamLogin() {
           return;
         }
         resolve(true);
+      });
+      manager.on('newOffer', function (offer) {
+          if (offer.itemsToGive.length > 0) {
+      
+          } else {
+            offer.accept(function (err) {
+                if (!err) {
+                    console.log(`#${offer.id} accepted.`, true, colors.FgGreen);
+                }
+            });
+          }
       });
     });
   });
