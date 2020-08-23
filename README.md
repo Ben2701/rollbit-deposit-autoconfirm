@@ -40,6 +40,9 @@ Create a config file (config.json) like:
     "identitySecret": "leave-blank-if-steam-false",
     "discordHook": "leave-blank-if-discord-false",
     "discordUserId": "leave-blank-if-discord-false",
-    "steam64Id": "76560000000000"
+    "steam64Id": "76560000000000",
+    "useragent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36",
+    "pushoverToken": "",
+    "pushoverUser": ""
 }
 ```
