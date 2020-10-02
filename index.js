@@ -14,6 +14,7 @@ const
 let userInventory = [];
 let pushoverClient = undefined;
 let manager = undefined;
+let ts = 07;
 
 if (config.pushover) {
   pushoverClient = new Push({
@@ -36,16 +37,12 @@ if (config.steam) {
   });
   steamLogin().then(() => {
     console.log('Logged in to steam.');
-    init();
   }).catch(e => {
     console.log('Failed to login to steam.');
   });
-} else {
-  setTimeout(async () => {
-    userInventory = await getInventory(config.steam64Id);
-  });
-  init();
 }
+
+init();
 
 const mainHeaders = {
   'User-Agent': config.useragent,
@@ -144,9 +141,8 @@ const exceptAssetIds = [
 ];
 
 function sendSteamOffer(sendItem, tradeUrl) {
-  steamLogin().then(async () => {
+  steamLogin().then(() => {
     const items = [];
-    userInventory = await getInventory(config.steam64Id);
     userInventory.forEach(item => {
       if (
         item.market_hash_name == sendItem.name &&
@@ -157,8 +153,8 @@ function sendSteamOffer(sendItem, tradeUrl) {
       ) {
         items.push({
           assetid: item.assetid,
-          appid: item.appid,
-          contextid: item.contextid,
+          appid: 730,
+          contextid: 2,
         });
       }
     });
@@ -174,7 +170,7 @@ function sendSteamOffer(sendItem, tradeUrl) {
       }
     });
   }).catch(e => {
-    console.log('Failed to log in to steam.');
+    console.log(e);
   });
 }
 function confirmTrade(depositId) {
@@ -238,44 +234,41 @@ function sendMessage(msg, discord = false, pushover = false) {
 // }
 function loadInventory(steamId) {
   return new Promise(async (resolve, reject) => {
-    if (process.env.npm_lifecycle_event === 'start:dev') {
-      const options = {
-        url: `https://steamcommunity.com/inventory/${steamId}/730/2?count=1000&l=english`,
-        method: 'GET',
-        gzip: true,
-        json: true,
-      };
-      request(options, async (error, response, body) => {
-        if (!error) {
-          resolve(body);
-        } else {
-          resolve(null);
-        }
-      });
-    }
+    const options = {
+      url: `https://steamcommunity.com/inventory/${steamId}/730/2?l=english&count=1000`,
+      method: 'GET',
+      gzip: true,
+      json: true,
+    };
+    request(options, async (error, response, body) => {
+      if (!error) {
+        const items = [];
+        body.assets.forEach( asset => {
+          const item = body.descriptions.find(desc => desc.instanceid === asset.instanceid && desc.classid === asset.classid);
+          items.push({
+            ...item,
+            assetid: asset.assetid            
+          });
+        });
+        resolve(items);
+      } else {
+        resolve(null);
+      }
+    });
   });
 }
-function getInventory(steamId) {
-  return new Promise(async (resolve, reject) => {
-    const body = await loadInventory(steamId);
-    if (body) {
-      const assets = [];
-      Object.keys(body.rgInventory).forEach(assetId => {
-        const classId = body.rgInventory[assetId].classid;
-        const instanceId = body.rgInventory[assetId].instanceid;
-        assets.push({
-          ...body.rgDescriptions[`${classId}_${instanceId}`],
-          assetid: assetId,
-        })
-      })
-      resolve(assets);
-    } else {
-      reject(null);
-    }
-  })
-}
+
 function steamLogin() {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
+
+    if ((new Date() - ts) < 30 * 60 * 1000) {
+      return resolve();
+    }
+
+    ts = new Date();
+
+    userInventory = await loadInventory(config.steam64Id);
+
     const logOnOptions = {
       "accountName": config.accountName,
       "password": config.password,
