@@ -14,7 +14,7 @@ const
 let userInventory = [];
 let pushoverClient = undefined;
 let manager = undefined;
-let ts = 07;
+let ts = 0;
 
 if (config.pushover) {
   pushoverClient = new Push({
