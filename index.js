@@ -1,7 +1,6 @@
-const io = require('socket.io-client'),
+const
   request = require('request'),
   SteamTotp = require('steam-totp'),
-  express = require('express'),
   SteamCommunity = require('steamcommunity'),
   steam = new SteamCommunity(),
   fs = require('fs'),
@@ -10,64 +9,43 @@ const io = require('socket.io-client'),
   util = require('util'),
   TradeOfferManager = require('steam-tradeoffer-manager'),
   config = require('./config.json'),
-  Push = require( 'pushover-notifications' );
+  Push = require('pushover-notifications');
 
+let userInventory = [];
 let pushoverClient = undefined;
-if(config.pushover) {
+let manager = undefined;
+
+if (config.pushover) {
   pushoverClient = new Push({
     user: config.pushoverUser,
     token: config.pushoverToken,
   });
 }
-
-const colors = {
-  FgBlack: "\x1b[30m",
-  FgRed: "\x1b[31m",
-  FgGreen: "\x1b[32m",
-  FgYellow: "\x1b[33m",
-  FgBlue: "\x1b[34m",
-  FgMagenta: "\x1b[35m",
-  FgCyan: "\x1b[36m",
-  FgWhite: "\x1b[37m",
-};
 const log = console.log;
-
-let userInventory = [];
-
 console.log = function (d, dc = false, color = '\x1b[0m') {
-  log(color, "[" + dateFormat(new Date(), "yyyy-mm-dd H:MM:ss") + "] " + util.format(d));
+  log(color + "[" + dateFormat(new Date(), "yyyy-mm-dd H:MM:ss") + "] " + util.format(d));
 };
 
 
-let manager = new TradeOfferManager({
-  "domain": config.domain,
-  "language": "en",
-  "pollInterval": 30000,
-  "cancelTime": 9 * 60 * 1000, // cancel outgoing offers after 9mins
-});
-// if steam deposit enabled
 if (config.steam) {
+  manager = new TradeOfferManager({
+    "domain": config.domain,
+    "language": "en",
+    "pollInterval": 30000,
+    "cancelTime": 9 * 60 * 1000, // cancel outgoing offers after 9mins
+  });
   steamLogin().then(() => {
     console.log('Logged in to steam.');
-    getInventory(config.steam64Id, 730).then(inventory => {
-      userInventory = inventory;
-    });
     init();
+  }).catch(e => {
+    console.log('Failed to login to steam.');
   });
-}else{
+} else {
+  setTimeout(async () => {
+    userInventory = await getInventory(config.steam64Id);
+  });
   init();
 }
-
-// do not terminate the app
-setInterval(function() {
-  steamLogin().then(() => {
-    console.log('Logged in to steam.');
-    getInventory(config.steam64Id, 730).then(inventory => {
-      userInventory = inventory;
-    });
-    init();
-  });
-}, 1000 * 60 * 60);
 
 const mainHeaders = {
   'User-Agent': config.useragent,
@@ -99,38 +77,34 @@ function init() {
   });
 
   if (this.connection !== null) {
-    this.connection.onmessage = e => {
+    this.connection.onmessage = async (e) => {
       const data = JSON.parse(e.data);
       if (data[0] === 'balance') {
-        console.log(data);
-        if(balance !== data[1].balance) {
+        if (balance !== data[1].balance) {
           console.log('Logged in to rollbit.com');
           balance = data[1].balance;
           sendMessage(`Balance: ${data[1].balance}`, true);
         }
       }
-      if (
-        data[0] === 'steam/deposit'
-      ) {
+      if (data[0] === 'steam/deposit') {
         switch (data[1].state) {
           case 'listed':
             break;
           case 'withdrawn':
-            confirmTrade(data[1].ref).then(() => {
+            try {
+              await confirmTrade(data[1].ref);
               if (offerSentFor.indexOf(data[1].ref) === -1) {
                 offerSentFor.push(data[1].ref);
-                getDetails(data[1].ref).then(details => {
-                  if (config.steam) {
-                    sendSteamOffer(details.trade.items[0], details.trade.tradeUrl);
-                  }
-                  sendMessage(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`, config.discord, config.pushover);
-                  console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
-                });
+                const details = await getDetails(data[1].ref);
+                if (config.steam) {
+                  sendSteamOffer(details.trade.items[0], details.trade.tradeUrl);
+                }
+                sendMessage(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`, config.discord, config.pushover);
+                console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
               }
-            }).catch(err => {
-              console.log(err);
-              // something went wrong
-            });
+            } catch (e) {
+              console.log(e);
+            }
             break;
         }
       }
@@ -170,8 +144,9 @@ const exceptAssetIds = [
 ];
 
 function sendSteamOffer(sendItem, tradeUrl) {
-  steamLogin().then(() => {
+  steamLogin().then(async () => {
     const items = [];
+    userInventory = await getInventory(config.steam64Id);
     userInventory.forEach(item => {
       if (
         item.market_hash_name == sendItem.name &&
@@ -191,13 +166,15 @@ function sendSteamOffer(sendItem, tradeUrl) {
     offer.addMyItems(items);
     offer.send(function (err, status) {
       if (offer.id !== null) {
-        setTimeout( () => {
+        setTimeout(() => {
           steam.acceptConfirmationForObject(config.identitySecret, offer.id, status => {
             console.log('Deposit item sent & confirmed');
           });
         }, 3000);
       }
     });
+  }).catch(e => {
+    console.log('Failed to log in to steam.');
   });
 }
 function confirmTrade(depositId) {
@@ -223,9 +200,8 @@ function confirmTrade(depositId) {
     });
   });
 }
-
 function sendMessage(msg, discord = false, pushover = false) {
-  if(discord) {
+  if (discord) {
     request({
       url: config.discordHook,
       method: 'POST',
@@ -237,7 +213,7 @@ function sendMessage(msg, discord = false, pushover = false) {
       //
     });
   }
-  if(pushover) {
+  if (pushover) {
     pushoverClient.send({
       message: msg,
       title: '[ROLLBIT] Deposit',
@@ -249,16 +225,54 @@ function sendMessage(msg, discord = false, pushover = false) {
     });
   }
 }
-function getInventory(steamId, appId) {
-  return new Promise((resolve, reject) => {
-    manager.getUserInventoryContents(steamId, appId, 2, true, function (err, inventory, currency) {
-      if (inventory) {
-        resolve(inventory);
-      } else {
-        resolve([]);
-      }
-    });
+// function getInventory(steamId) {
+//   return new Promise((resolve, reject) => {
+//     manager.getUserInventoryContents(steamId, 730, 2, true, function (err, inventory, currency) {
+//       if (inventory) {
+//         resolve(inventory);
+//       } else {
+//         resolve([]);
+//       }
+//     });
+//   });
+// }
+function loadInventory(steamId) {
+  return new Promise(async (resolve, reject) => {
+    if (process.env.npm_lifecycle_event === 'start:dev') {
+      const options = {
+        url: `https://steamcommunity.com/inventory/${steamId}/730/2?count=1000&l=english`,
+        method: 'GET',
+        gzip: true,
+        json: true,
+      };
+      request(options, async (error, response, body) => {
+        if (!error) {
+          resolve(body);
+        } else {
+          resolve(null);
+        }
+      });
+    }
   });
+}
+function getInventory(steamId) {
+  return new Promise(async (resolve, reject) => {
+    const body = await loadInventory(steamId);
+    if (body) {
+      const assets = [];
+      Object.keys(body.rgInventory).forEach(assetId => {
+        const classId = body.rgInventory[assetId].classid;
+        const instanceId = body.rgInventory[assetId].instanceid;
+        assets.push({
+          ...body.rgDescriptions[`${classId}_${instanceId}`],
+          assetid: assetId,
+        })
+      })
+      resolve(assets);
+    } else {
+      reject(null);
+    }
+  })
 }
 function steamLogin() {
   return new Promise((resolve, reject) => {
@@ -288,17 +302,6 @@ function steamLogin() {
           return;
         }
         resolve(true);
-      });
-      manager.on('newOffer', function (offer) {
-          if (offer.itemsToGive.length > 0) {
-      
-          } else {
-            offer.accept(function (err) {
-                if (!err) {
-                    console.log(`#${offer.id} accepted.`, true, colors.FgGreen);
-                }
-            });
-          }
       });
     });
   });
