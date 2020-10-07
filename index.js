@@ -107,6 +107,19 @@ function init() {
       }
       // console.log(e);
     }
+    
+    this.connection.onerror = (e) => {
+      console.log(`Connection error: ${e}`);
+      setTimeout( () => {
+        init();
+      }, 5000);
+    };
+    this.connection.onclose = (e) => {
+      console.log(`Connection closed: ${e}`);
+      setTimeout( () => {
+        init();
+      }, 5000);
+    };
   }
 }
 
