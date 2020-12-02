@@ -10,6 +10,7 @@ const
   TradeOfferManager = require('steam-tradeoffer-manager'),
   config = require('./config.json'),
   Push = require('pushover-notifications');
+  open = require('open');
 
 let userInventory = [];
 let pushoverClient = undefined;
@@ -40,6 +41,10 @@ if (config.steam) {
   }).catch(e => {
     console.log('Failed to login to steam.');
   });
+} else if (config.csgoTraderSend) {
+  (async () => {
+    userInventory = await loadInventory(config.steam64Id);
+  })();
 }
 
 init();
@@ -93,8 +98,27 @@ function init() {
               if (offerSentFor.indexOf(data[1].ref) === -1) {
                 offerSentFor.push(data[1].ref);
                 const details = await getDetails(data[1].ref);
+                const itemToDeposit = details.trade.items[0];
                 if (config.steam) {
-                  sendSteamOffer(details.trade.items[0], details.trade.tradeUrl);
+                  sendSteamOffer(itemToDeposit, details.trade.tradeUrl);
+                } else if (config.csgoTraderSend) {
+                  userInventory = await loadInventory(config.steam64Id);
+                  const itemIDs = [];
+                  userInventory.forEach(item => {
+                    if (
+                      item.market_hash_name == itemToDeposit.name &&
+                      item.instanceid == itemToDeposit.instanceid &&
+                      item.classid == itemToDeposit.classid &&
+                      exceptAssetIds.indexOf(item.assetid) == -1 &&
+                      !itemIDs.length
+                    ) {
+                      itemIDs.push(item.assetid);
+                    }
+                  });
+                  console.log('Opening send link in browser.');
+                  (async () => { // opens the link in chrome
+                    await open(`${details.trade.tradeUrl}&csgotrader_send=your_id_730_2_${itemIDs.toString()}`, {app: 'chrome'});
+                  })();
                 }
                 sendMessage(`<@${config.discordUserId}> Deposit offer for ${details.trade.items[0].name} accepted`, config.discord, config.pushover);
                 console.log(`Deposit offer for ${details.trade.items[0].name} accepted`);
