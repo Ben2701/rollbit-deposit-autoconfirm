@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "dateformat": "^3.0.3",
+    "open": "^7.3.0",
     "pushover-notifications": "^1.2.2",
     "request": "^2.88.2",
     "steam-totp": "^2.1.1",
